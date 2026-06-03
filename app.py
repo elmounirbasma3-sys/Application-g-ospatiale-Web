@@ -1,22 +1,27 @@
 import streamlit as st
-import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 import requests
 import pandas as pd
 import plotly.express as px
-
-
+import json
 
 ## Charger les shapefiles
-regions = gpd.read_file("\data\Regions_WGS84.shp")
-provinces = gpd.read_file("\data\Provinces_WGS84.shp")
-communes = gpd.read_file("\data\communes_WGS84.shp")
+
+
+with open("data/regions.geojson") as f:
+    regions = json.load(f)
+
+with open("data/provinces.geojson") as f:
+    provinces = json.load(f)
+
+with open("data/communes.geojson") as f:
+    communes = json.load(f)
+
+
 
 st.title(" 🌍 Navigation administrative Maroc")
 
-#ON DIVISE L'INTERFACE PAR 3 COLLONES
-col1, col2, col3 = st.columns([1, 2, 1.5])
 
 #Lecture
 
@@ -37,38 +42,24 @@ communes_filtrees = None
 # MODULE 1 : Module de navigation administrative ------------------------------------------------------------------------------------
 
 #MENU REGION
-liste_regions = regions[REGION_COL].unique()
 
-selected_region = st.selectbox(
-    "Choisir une région",[""] + list(regions["libelle_fr"].unique())
-)
+region_names = sorted(list(set(
+    feat["properties"]["libelle_fr"]
+    for feat in regions["features"]
+    if feat["properties"].get("libelle_fr")
+)))
+
+selected_region = st.selectbox("Choisir une région", [""] + region_names)
+
+# === FILTRAGE COMMUNES ===
+filtered_features = []
 
 if selected_region != "":
-#filtre les provinces de la region choisie
-    provinces_filtrees = communes[
-        communes[REGION_IN_COMMUNE] == selected_region
+    filtered_features = [
+        f for f in communes["features"]
+        if f["properties"].get("FIRST_regi") == selected_region
     ]
 
-#MENU PROVINCES
-    liste_provinces = list(provinces_filtrees[PROVINCE_COL].unique())
-
-    selected_province = st.selectbox( 
-        "Choisir une province", [""] + liste_provinces
-    )
-
-#filtre les communes de la region choisie
-    if selected_province != "" :
-        communes_filtrees = provinces_filtrees[
-        provinces_filtrees["FIRST_prov"] == selected_province
-    ]
-
-#MENU COMMUNES
-        liste_communes = list(communes_filtrees[COMMUNE_COL].unique())
-
-        selected_communes = st.selectbox(
-            "Choisir une commune", [""] + 
-            liste_communes
-        )
 
 # MODULE 2 : Module de visualisation cartographique ---------------------------------------------------------------------------------------
 
@@ -84,106 +75,50 @@ mode_affichage = st.radio(
 
 
 ##Determiner l'entite active
-active_gdf = None 
 
-if selected_region != "" and selected_province == "":
-# région
-    active_gdf = regions[
-        regions["libelle_fr"] == selected_region
-    ]
+# === CENTRE PAR DEFAUT
+lat, lon = 31.7917, -7.0926
 
+# === CENTRE SI FILTRAGE
+if filtered_features:
+    coords = filtered_features[0]["geometry"]["coordinates"]
+    try:
+        lon = coords[0][0][0]
+        lat = coords[0][0][1]
+    except:
+        pass
 
-elif selected_province != "" and selected_communes == "":
-# province (à partir communes)
-    active_gdf = communes[
-        (communes["FIRST_regi"] == selected_region) &
-        (communes["FIRST_prov"] == selected_province)
-    ].dissolve()
+# === CREATION CARTE
+# === CREATION CARTE
+m = folium.Map(location=[lat, lon], zoom_start=6)
 
+geo = {
+    "type": "FeatureCollection",
+    "features": filtered_features if filtered_features else regions["features"]
+}
 
-elif selected_communes != "":
-# commune
-    active_gdf = communes[
-        (communes["FIRST_regi"] == selected_region) &
-        (communes["FIRST_prov"] == selected_province) &
-        (communes["FIRST_com_"] == selected_communes)
-    ]
-## Verifier qu'une entite est selectionnee
-
-
-if active_gdf is None or active_gdf.empty:
-    st.info("Sélectionne une région pour afficher la carte.")
-    st.stop()
-
-# calcul du centre
-centre = active_gdf.geometry.union_all().centroid
-
-lat = centre.y
-lon = centre.x
-
-# Creation de la carte
-m = folium.Map(location=[lat, lon], zoom_start=7, control_scale = True, tiles =  "OpenStreetMap")
-
-# nettoyer données
-active_gdf = active_gdf[active_gdf.geometry.notnull()]
-
-# fusion
-geom_union = active_gdf.geometry.union_all()
-
-# MODE 1 : Contour + MNT
-if mode_affichage == "Contour + MNT":
-
+if mode_affichage in ["Contour seulement", "Contour + MNT"]:
     folium.GeoJson(
-        active_gdf,
-        name="Contour",
+        geo,
         style_function=lambda x: {
-            "fillOpacity": 0,   
-            "color": "blue",       
-            "weight": 3
+            "fillOpacity": 0,
+            "color": "blue",
+            "weight": 2
         }
     ).add_to(m)
 
+if mode_affichage in ["Contour + MNT", "MNT seulement"]:
     folium.raster_layers.WmsTileLayer(
         url="https://ows.terrestris.de/osm/service?",
-        layers="SRTM30-Colored-Hillshade",   
-        name="MNT Terrestris",
+        layers="SRTM30-Colored-Hillshade",
         fmt="image/png",
         transparent=True,
-        overlay=True,
-        control=True
+        overlay=True
     ).add_to(m)
 
-# MODE 2 : MNT seulement
-elif mode_affichage == "MNT seulement":
-
-    folium.raster_layers.WmsTileLayer(
-        url="https://ows.terrestris.de/osm/service?",
-        layers="SRTM30-Colored-Hillshade",   
-        name="MNT Terrestris",
-        fmt="image/png",
-        transparent=True,
-        overlay=True,
-        control=True
-    ).add_to(m)
-
-# MODE 3 : CONTOUR SEULEMENT
-elif mode_affichage == "Contour seulement":
-
-    folium.GeoJson(
-        active_gdf,
-        name="Contour",
-        style_function=lambda x: {
-            "fillOpacity": 0,   
-            "color": "blue",       
-            "weight": 3
-        }
-    ).add_to(m)
-
-bounds = active_gdf.total_bounds   # [minx, miny, maxx, maxy]
-m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
 ## TITRE
-if "selected_communes" in locals():
+if selected_communes != "" :
     titre = f"{selected_region} / {selected_province} / {selected_communes}"
 elif selected_province != "":
     titre = f"{selected_region} / {selected_province}"
