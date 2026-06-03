@@ -22,9 +22,9 @@ st.set_page_config(
 # Charger les shapefiles
 # ============================================================
 
-regions = gpd.read_file("data/regions/Regions_WGS84.shp")
-provinces = gpd.read_file("data/provinces/Provinces_WGS84.shp")
-communes = gpd.read_file("data/communes/communes_WGS84.shp")
+regions = gpd.read_file("data/Regions_WGS84.shp")
+provinces = gpd.read_file("data/Provinces_WGS84.shp")
+communes = gpd.read_file("data/communes_WGS84.shp")
 
 # S'assurer que les couches sont en WGS84
 regions = regions.to_crs(epsg=4326)
