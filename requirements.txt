@@ -1,8 +1,12 @@
-streamlit==1.35.0
-folium==0.16.0
-streamlit-folium==0.20.0
-requests==2.32.3
-pandas==2.2.3
-plotly==5.22.0
+streamlit
+geopandas
+folium
+streamlit-folium
+pandas
+requests
+plotly
+shapely
+fiona
+pyproj
 
 
