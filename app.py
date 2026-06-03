@@ -9,9 +9,9 @@ import plotly.express as px
 
 
 ## Charger les shapefiles
-regions = gpd.read_file("D:\python\data\Regions_WGS84.shp")
-provinces = gpd.read_file("D:\python\data\Provinces_WGS84.shp")
-communes = gpd.read_file("D:\python\data\communes_WGS84.shp")
+regions = gpd.read_file("\data\Regions_WGS84.shp")
+provinces = gpd.read_file("\data\Provinces_WGS84.shp")
+communes = gpd.read_file("\data\communes_WGS84.shp")
 
 st.title(" 🌍 Navigation administrative Maroc")
 
